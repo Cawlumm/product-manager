@@ -1,4 +1,5 @@
-from PyQt5 import QtGui
+from asyncio import Event
+from PyQt5 import QtCore, QtGui
 from bs4 import BeautifulSoup as bs
 from matplotlib.backend_bases import MouseEvent
 import requests
@@ -23,19 +24,18 @@ def search_ebay_items(keyword):
     # Return Soup varaible in html format
     return soup
     
-# Override for Clickable text_area QTextEdit
-class ClickableTextEdit(QTextBrowser):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-    def on_anchor_clicked(self, QUrl):
-        print(QUrl, 'anchor clicked')
 
 # GUI Class
 class MyGUI(QMainWindow):
     def __init__(self):
         super().__init__()
-
         self.initUI()
+
+    # Custom button class
+    class CustomButtom(QPushButton):
+        # Overide hover event
+        def enterEvent(self, a0: Event) -> None:
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
 
     def initUI(self):
         # Set up the main window
@@ -63,23 +63,17 @@ class MyGUI(QMainWindow):
         search_layout.addWidget(self.search_bar)
 
         # Add checkboxes in the middle
+        self.favorites_title = QLabel()
+        self.favorites_title.setText('Favorite Products:')
+        self.favorites_title.setStyleSheet("""
+            QLabel {
+                padding-left: 5px;
+                font-size: 14px;
+            }
+        """)
+        self.favorites_array = []
         self.checkbox_layout = QVBoxLayout()
-        self.checkbox1 = QCheckBox("Option 1")
-        self.checkbox2 = QCheckBox("Option 2")
-        self.checkbox1.setStyleSheet("""
-            QCheckBox {
-                font-size: 14px;
-                padding: 5px;
-            }
-        """)
-        self.checkbox2.setStyleSheet("""
-            QCheckBox {
-                font-size: 14px;
-                padding: 5px;
-            }
-        """)
-        self.checkbox_layout.addWidget(self.checkbox1)
-        self.checkbox_layout.addWidget(self.checkbox2)
+        self.checkbox_layout.addWidget(self.favorites_title)
 
         # Add the textarea with scroll bars
         self.scroll_area = QScrollArea()
@@ -100,8 +94,8 @@ class MyGUI(QMainWindow):
 
         # Add the run and cancel buttons at the bottom
         button_layout = QHBoxLayout()
-        self.run_button = QPushButton("Run")
-        self.cancel_button = QPushButton("Clear")
+        self.run_button = self.CustomButtom("Run")
+        self.cancel_button = self.CustomButtom("Clear")
         self.run_button.setStyleSheet("""
             QPushButton {
                 padding: 10px;
@@ -152,11 +146,49 @@ class MyGUI(QMainWindow):
             if widget:
                 widget.deleteLater()
 
-    # Override for Qlabel class
-    class dataLable(QLabel):
-        # Override for mousePressEvent, print given Qlable's text
-        def mousePressEvent(self, ev: MouseEvent) -> None:
-            print(self.text())
+    def is_checkbox_in_layout(self, checkbox_layout, checkbox_to_find):
+        for index in range(checkbox_layout.count()):
+            widget = checkbox_layout.itemAt(index).widget()
+            if widget.text() == checkbox_to_find.text():
+                return True
+        return False
+    
+    # Function to add checkboxes for each item in the favorites list
+    def add_favorite_to_ckhboxes(self, data):
+        # Apply a common stylesheet to all checkboxes
+        checkbox_style = (
+            "QCheckBox {"
+            "    padding: 5px;"
+            "    spacing: 10px;"
+            "}"
+            "QCheckBox::indicator {"
+            "    width: 20px;"
+            "    height: 20px;"
+            "}"
+            "QCheckBox::indicator:checked {"
+            "    image: url(tick.png);" 
+            "}"
+        )
+        if data not in self.favorites_array:
+            self.favorites_array.append(data)
+            for item in self.favorites_array:
+                checkbox = QCheckBox(item)
+                checkbox.setChecked(False)
+                checkbox.setStyleSheet(checkbox_style)
+                if self.is_checkbox_in_layout(self.checkbox_layout, checkbox):
+                    print("true")
+                else:
+                    print("false")
+                    self.checkbox_layout.addWidget(checkbox)
+
+    def mouse_click_handler(self, text):
+        print(text)
+        self.add_favorite_to_ckhboxes(text)
+
+    class DataLabel(QLabel):  
+        # Override for mousehover event, give the cursor a pointer look
+        def enterEvent(self, a0: Event) -> None:
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
 
     def on_run_button_clicked(self):
         # Function to run when the "Run" button is clicked
@@ -181,14 +213,20 @@ class MyGUI(QMainWindow):
         for title, price, sold in zip(item_titles, item_prices, item_sold):
 
             # Instanciate new dataLabel
-            label = self.dataLable(f"Title: {title} | Price: {price} | {sold}")
+            label = self.DataLabel(f"Title: {title} | Price: {price} | {sold}")
+
+            # Use the current text of the label as an argument for the click handler to use
+            label.mousePressEvent = lambda event, text=label.text(): self.mouse_click_handler(text)
 
             # Add widget to content widget
             self.scroll_area_content.addWidget(label)
 
         # Set the content widget layout and update the scroll area
         self.scroll_area.setWidget(self.content_widget)   
-            
+        
+        # Set the vertical stretch factor for the layout to 1 (default is 0)
+        self.scroll_area.setContentsMargins(10, 10, 10, 10)  # Optional: Set layout margins for spacing
+        self.scroll_area.setWidgetResizable(True)
     def on_cancel_button_clicked(self):
         # Function to run when the "Cancel" button is clicked
         print("Cancel button clicked")
