@@ -1,12 +1,27 @@
 from asyncio import Event
 import functools
-from PyQt5.QtGui import QPixmap, QIcon
-from bs4 import BeautifulSoup as bs
-from matplotlib.backend_bases import MouseEvent
 import requests
 import sys
+import json
+from PyQt5.QtGui import QPixmap, QIcon
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QTextBrowser, QPushButton, QCheckBox, QLabel, QScrollArea
 from PyQt5.QtCore import Qt, QSize
+from bs4 import BeautifulSoup as bs
+from matplotlib.backend_bases import MouseEvent
+
+
+# Save favorites array to a JSON file
+def save_favorites_to_file(favorites):
+    with open('favorites.json', 'w') as f:
+        json.dump(favorites, f)
+
+# Grab favorites array from JSON file
+
+
+def grab_favorites_from_file():
+    with open('favorites.json', 'r') as f:
+        data = json.load(f)
+        return data
 
 # Function to search items given a keyword
 
@@ -69,8 +84,22 @@ class MyGUI(QMainWindow):
         # self.favorites_title = QLabel()
         # self.favorites_title.setText('Favorite Products:')
 
-        self.favorites_array = []
+        self.favorites_array = grab_favorites_from_file()
         self.checkbox_layout = QVBoxLayout()
+        # Apply a common stylesheet to all checkboxes
+        self.widget_style = (
+            "QCheckBox, QPushButton {"
+            "    padding: 5px;"
+            "    spacing: 10px;"
+            "}"
+            "QCheckBox::indicator {"
+            "    width: 20px;"
+            "    height: 20px;"
+            "}"
+            "QCheckBox::indicator:checked {"
+            "    image: url(tick.png);"
+            "}"
+        )
         # self.checkbox_layout.addWidget(self.favorites_title)
 
         # Add the textarea with scroll bars
@@ -132,6 +161,9 @@ class MyGUI(QMainWindow):
         # Set the main layout for the central widget
         central_widget.setLayout(layout)
 
+        # Load inital saved checkboxes into GUI
+        self.add_favorites_to_chkboxes(self.favorites_array)
+
         # Connect buttons to their functions
         self.run_button.clicked.connect(self.on_run_button_clicked)
         self.cancel_button.clicked.connect(self.on_cancel_button_clicked)
@@ -175,22 +207,51 @@ class MyGUI(QMainWindow):
                     widget_layout.itemAt(1).widget().deleteLater()
                     self.checkbox_layout.removeItem(widget_layout)
 
+    def add_favorites_to_chkboxes(self, array):
+        """Add items to the favorites list"""
+        # Loop over each item in the array
+        for item in array:
+            # Create
+            chkBoxWidget = QCheckBox()
+            # Create horizontal layout for chkbox and remove button
+            widget_layout = QHBoxLayout()
+
+            # Create and add chkbox to layout
+            checkbox = QCheckBox(item)
+            checkbox.setChecked(False)
+            checkbox.setStyleSheet(self.widget_style)
+            widget_layout.addWidget(checkbox)
+
+            # Move the "Remove" button to the left
+            widget_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+            # Create the "Remove" button with the 'remove.png' icon image
+            remove_button = self.CustomButtom()
+            remove_button.setFixedSize(15, 15)
+            remove_button.setStyleSheet(self.widget_style)
+
+            # Load the icon pixmap from the image file
+            pixmap = QPixmap("remove.png")
+
+            # Scale the pixmap to the desired size
+            icon_size = QSize(24, 24)
+            scaled_pixmap = pixmap.scaled(icon_size)
+
+            # Create the QIcon from the scaled pixmap
+            icon = QIcon(scaled_pixmap)
+            remove_button.setIcon(icon)
+
+            # Set X icon on button
+            remove_button.setIconSize(icon_size)
+            # Use functools.partial to capture the value of 'item'
+            print(item)
+            remove_button.clicked.connect(
+                functools.partial(self.remove_favorite, item))
+
+            widget_layout.addWidget(remove_button)
+            self.checkbox_layout.addLayout(widget_layout)
     # Function to add checkboxes for each item in the favorites list
+
     def add_favorite_to_ckhboxes(self, data):
-        # Apply a common stylesheet to all checkboxes
-        widget_style = (
-            "QCheckBox, QPushButton {"
-            "    padding: 5px;"
-            "    spacing: 10px;"
-            "}"
-            "QCheckBox::indicator {"
-            "    width: 20px;"
-            "    height: 20px;"
-            "}"
-            "QCheckBox::indicator:checked {"
-            "    image: url(tick.png);"
-            "}"
-        )
         # Varifying the data is not already in the lust
         if data not in self.favorites_array:
 
@@ -206,7 +267,7 @@ class MyGUI(QMainWindow):
                 # Create and add chkbox to layout
                 checkbox = QCheckBox(favorite)
                 checkbox.setChecked(False)
-                checkbox.setStyleSheet(widget_style)
+                checkbox.setStyleSheet(self.widget_style)
                 widget_layout.addWidget(checkbox)
 
                 # Move the "Remove" button to the left
@@ -218,7 +279,7 @@ class MyGUI(QMainWindow):
                     # Create the "Remove" button with the 'remove.png' icon image
                     remove_button = self.CustomButtom()
                     remove_button.setFixedSize(15, 15)
-                    remove_button.setStyleSheet(widget_style)
+                    remove_button.setStyleSheet(self.widget_style)
 
                     # Load the icon pixmap from the image file
                     pixmap = QPixmap("remove.png")
@@ -239,7 +300,6 @@ class MyGUI(QMainWindow):
                         functools.partial(self.remove_favorite, data))
 
                     widget_layout.addWidget(remove_button)
-                    # checkbox.mousePressEvent = lambda event, text=checkbox.text(): self.chkbox_click_handler(text)
                     self.checkbox_layout.addLayout(widget_layout)
 
     # Helper function for the label event click
@@ -297,6 +357,11 @@ class MyGUI(QMainWindow):
         # Function to run when the "Cancel" button is clicked
         print("Cancel button clicked")
         self.remove_all_widgets()
+
+        # Save favorites array when closing the program
+    def closeEvent(self, event):
+        save_favorites_to_file(self.favorites_array)
+        super().closeEvent(event)
 
 
 # Main Function
