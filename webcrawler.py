@@ -1,13 +1,16 @@
 from asyncio import Event
-from PyQt5 import QtCore, QtGui
+import functools
+from PyQt5.QtGui import QPixmap, QIcon
 from bs4 import BeautifulSoup as bs
 from matplotlib.backend_bases import MouseEvent
 import requests
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QTextBrowser, QPushButton, QCheckBox, QLabel, QScrollArea, QSizePolicy
-from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QTextBrowser, QPushButton, QCheckBox, QLabel, QScrollArea
+from PyQt5.QtCore import Qt, QSize
 
 # Function to search items given a keyword
+
+
 def search_ebay_items(keyword):
     # URL With Searchword
     url = f'https://www.ebay.com/sch/i.html?_nkw={keyword}'
@@ -23,7 +26,7 @@ def search_ebay_items(keyword):
 
     # Return Soup varaible in html format
     return soup
-    
+
 
 # GUI Class
 class MyGUI(QMainWindow):
@@ -63,17 +66,12 @@ class MyGUI(QMainWindow):
         search_layout.addWidget(self.search_bar)
 
         # Add checkboxes in the middle
-        self.favorites_title = QLabel()
-        self.favorites_title.setText('Favorite Products:')
-        self.favorites_title.setStyleSheet("""
-            QLabel {
-                padding-left: 5px;
-                font-size: 14px;
-            }
-        """)
+        # self.favorites_title = QLabel()
+        # self.favorites_title.setText('Favorite Products:')
+
         self.favorites_array = []
         self.checkbox_layout = QVBoxLayout()
-        self.checkbox_layout.addWidget(self.favorites_title)
+        # self.checkbox_layout.addWidget(self.favorites_title)
 
         # Add the textarea with scroll bars
         self.scroll_area = QScrollArea()
@@ -137,7 +135,7 @@ class MyGUI(QMainWindow):
         # Connect buttons to their functions
         self.run_button.clicked.connect(self.on_run_button_clicked)
         self.cancel_button.clicked.connect(self.on_cancel_button_clicked)
-    
+
     # Function to clear widgets from layotus
     def remove_all_widgets(self):
         # Clear the scroll area conten
@@ -147,17 +145,41 @@ class MyGUI(QMainWindow):
                 widget.deleteLater()
 
     def is_checkbox_in_layout(self, checkbox_layout, checkbox_to_find):
+        # For each widget_layout in checkbox_layout
         for index in range(checkbox_layout.count()):
-            widget = checkbox_layout.itemAt(index).widget()
-            if widget.text() == checkbox_to_find.text():
-                return True
+            widget_layout = checkbox_layout.itemAt(index)  # Grab the chkbox
+
+            # Varifying the layout has two objects
+            if widget_layout and widget_layout.count() == 2:
+                chkbox = widget_layout.itemAt(0).widget()
+
+                # If the chkboxes have the same text it is in layout
+                if chkbox.text() == checkbox_to_find.text():
+                    return True
         return False
-    
+
+    # Function to remove item from favorites
+    def remove_favorite(self, text):
+        # Go through each item in favorites
+        for index in reversed(range(self.checkbox_layout.count())):
+            widget_layout = self.checkbox_layout.itemAt(index)
+            # Check if there are more than one object inside of this layout
+            if widget_layout and widget_layout.count() == 2:
+                chkbox = widget_layout.itemAt(0).widget()
+                text = text.strip()
+                chkbox_text = chkbox.text().strip()
+                # Check if the current text matches the given text from the event
+                if chkbox and chkbox_text == text:
+                    self.favorites_array.pop(index)
+                    widget_layout.itemAt(0).widget().deleteLater()
+                    widget_layout.itemAt(1).widget().deleteLater()
+                    self.checkbox_layout.removeItem(widget_layout)
+
     # Function to add checkboxes for each item in the favorites list
     def add_favorite_to_ckhboxes(self, data):
         # Apply a common stylesheet to all checkboxes
-        checkbox_style = (
-            "QCheckBox {"
+        widget_style = (
+            "QCheckBox, QPushButton {"
             "    padding: 5px;"
             "    spacing: 10px;"
             "}"
@@ -166,26 +188,65 @@ class MyGUI(QMainWindow):
             "    height: 20px;"
             "}"
             "QCheckBox::indicator:checked {"
-            "    image: url(tick.png);" 
+            "    image: url(tick.png);"
             "}"
         )
+        # Varifying the data is not already in the lust
         if data not in self.favorites_array:
-            self.favorites_array.append(data)
-            for item in self.favorites_array:
-                checkbox = QCheckBox(item)
-                checkbox.setChecked(False)
-                checkbox.setStyleSheet(checkbox_style)
-                if self.is_checkbox_in_layout(self.checkbox_layout, checkbox):
-                    print("true")
-                else:
-                    print("false")
-                    self.checkbox_layout.addWidget(checkbox)
 
-    def mouse_click_handler(self, text):
-        print(text)
+            # Append text data to tracker array
+            self.favorites_array.append(data)
+
+            # For each item in the tracker array
+            for favorite in self.favorites_array:
+
+                # Create horizontal layout for chkbox and remove button
+                widget_layout = QHBoxLayout()
+
+                # Create and add chkbox to layout
+                checkbox = QCheckBox(favorite)
+                checkbox.setChecked(False)
+                checkbox.setStyleSheet(widget_style)
+                widget_layout.addWidget(checkbox)
+
+                # Move the "Remove" button to the left
+                widget_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+
+                # Use of bool function to handle logic
+                if not self.is_checkbox_in_layout(self.checkbox_layout, checkbox):
+                    # If it isn't it can be added to the checkbox layout
+                    # Create the "Remove" button with the 'remove.png' icon image
+                    remove_button = self.CustomButtom()
+                    remove_button.setFixedSize(15, 15)
+                    remove_button.setStyleSheet(widget_style)
+
+                    # Load the icon pixmap from the image file
+                    pixmap = QPixmap("remove.png")
+
+                    # Scale the pixmap to the desired size
+                    icon_size = QSize(24, 24)
+                    scaled_pixmap = pixmap.scaled(icon_size)
+
+                    # Create the QIcon from the scaled pixmap
+                    icon = QIcon(scaled_pixmap)
+                    remove_button.setIcon(icon)
+
+                    # Set X icon on button
+                    remove_button.setIconSize(icon_size)
+                    # Use functools.partial to capture the value of 'item'
+                    print(favorite)
+                    remove_button.clicked.connect(
+                        functools.partial(self.remove_favorite, data))
+
+                    widget_layout.addWidget(remove_button)
+                    # checkbox.mousePressEvent = lambda event, text=checkbox.text(): self.chkbox_click_handler(text)
+                    self.checkbox_layout.addLayout(widget_layout)
+
+    # Helper function for the label event click
+    def label_click_handler(self, text):
         self.add_favorite_to_ckhboxes(text)
 
-    class DataLabel(QLabel):  
+    class DataLabel(QLabel):
         # Override for mousehover event, give the cursor a pointer look
         def enterEvent(self, a0: Event) -> None:
             self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -199,15 +260,18 @@ class MyGUI(QMainWindow):
 
         # Collect Items
         soup = search_ebay_items(self.search_bar.text())
-        
+
         # Extract the item titles
-        item_titles = [item.get_text() for item in soup.select(".s-item__title")]
+        item_titles = [item.get_text()
+                       for item in soup.select(".s-item__title")]
 
         # Extract the item prices
-        item_prices = [item.get_text() for item in soup.select(".s-item__price")]
+        item_prices = [item.get_text()
+                       for item in soup.select(".s-item__price")]
 
-        # Extract the item quantity sold 
-        item_sold = [item.get_text() for item in soup.select(".s-item__quantitySold")]
+        # Extract the item quantity sold
+        item_sold = [item.get_text()
+                     for item in soup.select(".s-item__quantitySold")]
 
         # Print the extracted data
         for title, price, sold in zip(item_titles, item_prices, item_sold):
@@ -216,23 +280,24 @@ class MyGUI(QMainWindow):
             label = self.DataLabel(f"Title: {title} | Price: {price} | {sold}")
 
             # Use the current text of the label as an argument for the click handler to use
-            label.mousePressEvent = lambda event, text=label.text(): self.mouse_click_handler(text)
+            label.mousePressEvent = lambda event, text=label.text(): self.label_click_handler(text)
 
             # Add widget to content widget
             self.scroll_area_content.addWidget(label)
 
         # Set the content widget layout and update the scroll area
-        self.scroll_area.setWidget(self.content_widget)   
-        
+        self.scroll_area.setWidget(self.content_widget)
+
         # Set the vertical stretch factor for the layout to 1 (default is 0)
-        self.scroll_area.setContentsMargins(10, 10, 10, 10)  # Optional: Set layout margins for spacing
+        # Optional: Set layout margins for spacing
+        self.scroll_area.setContentsMargins(10, 10, 10, 10)
         self.scroll_area.setWidgetResizable(True)
+
     def on_cancel_button_clicked(self):
         # Function to run when the "Cancel" button is clicked
         print("Cancel button clicked")
         self.remove_all_widgets()
 
-            
 
 # Main Function
 if __name__ == '__main__':
