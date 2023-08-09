@@ -1,59 +1,18 @@
-from asyncio import Event
+# gui.py
+from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QTextBrowser, QPushButton, QCheckBox, QLabel, QScrollArea
+from PyQt5.QtCore import Qt
 import functools
-import requests
-import sys
-import json
-from PyQt5.QtGui import QPixmap, QIcon
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QTextBrowser, QPushButton, QCheckBox, QLabel, QScrollArea
-from PyQt5.QtCore import Qt, QSize
-from bs4 import BeautifulSoup as bs
-from matplotlib.backend_bases import MouseEvent
-
-
-# Save favorites array to a JSON file
-def save_favorites_to_file(favorites):
-    with open('favorites.json', 'w') as f:
-        json.dump(favorites, f)
-
-# Grab favorites array from JSON file
-
-
-def grab_favorites_from_file():
-    with open('favorites.json', 'r') as f:
-        data = json.load(f)
-        return data
-
-# Function to search items given a keyword
-
-
-def search_ebay_items(keyword):
-    # URL With Searchword
-    url = f'https://www.ebay.com/sch/i.html?_nkw={keyword}'
-
-    # Set Headers
-    headers = {'User-Agent': 'Mozilla/5.0'}
-
-    # Response from requests API
-    response = requests.get(url, headers=headers)
-
-    # Parsed HTML from BeautifySoup API
-    soup = bs(response.content, 'html.parser')
-
-    # Return Soup varaible in html format
-    return soup
-
+from asyncio import Event
+from custom import CustomButton
+from favorites_handler import save_favorites_to_file, grab_favorites_from_file, search_ebay_items
 
 # GUI Class
+
+
 class MyGUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.initUI()
-
-    # Custom button class
-    class CustomButtom(QPushButton):
-        # Overide hover event
-        def enterEvent(self, a0: Event) -> None:
-            self.setCursor(Qt.CursorShape.PointingHandCursor)
 
     def initUI(self):
         # Set up the main window
@@ -84,7 +43,7 @@ class MyGUI(QMainWindow):
         # self.favorites_title = QLabel()
         # self.favorites_title.setText('Favorite Products:')
 
-        self.favorites_array = grab_favorites_from_file()
+        self.favorites = grab_favorites_from_file()
         self.checkbox_layout = QVBoxLayout()
         # Apply a common stylesheet to all checkboxes
         self.widget_style = (
@@ -121,8 +80,8 @@ class MyGUI(QMainWindow):
 
         # Add the run and cancel buttons at the bottom
         button_layout = QHBoxLayout()
-        self.run_button = self.CustomButtom("Run")
-        self.cancel_button = self.CustomButtom("Clear")
+        self.run_button = QPushButton("Run")
+        self.cancel_button = QPushButton("Clear")
         self.run_button.setStyleSheet("""
             QPushButton {
                 padding: 10px;
@@ -162,7 +121,7 @@ class MyGUI(QMainWindow):
         central_widget.setLayout(layout)
 
         # Load inital saved checkboxes into GUI
-        self.add_favorites_to_chkboxes(self.favorites_array)
+        self.add_favorites_to_chkboxes(self.favorites)
 
         # Connect buttons to their functions
         self.run_button.clicked.connect(self.on_run_button_clicked)
@@ -202,70 +161,68 @@ class MyGUI(QMainWindow):
                 chkbox_text = chkbox.text().strip()
                 # Check if the current text matches the given text from the event
                 if chkbox and chkbox_text == text:
-                    self.favorites_array.pop(index)
+                    popped = self.favorites.pop(index)
+                    print(popped)
                     widget_layout.itemAt(0).widget().deleteLater()
                     widget_layout.itemAt(1).widget().deleteLater()
                     self.checkbox_layout.removeItem(widget_layout)
 
+    # Function to handle when a checkbox's state changes
+    def checkbox_state_changed_handler(self, state, item_to_update):
+        # Find the index of the dictionary with the matching 'item'
+        index_to_update = next((index for index, favorite in enumerate(
+            self.favorites) if favorite['item'] == item_to_update), None)
+
+        if index_to_update is not None:
+            # Update the checked state
+            self.favorites[index_to_update]['checked'] = state
+            print("Checked state updated:", item_to_update)
+        else:
+            print("Item not found:", item_to_update)
+
+    # Function to add checkboxes for each item in the favorites list
     def add_favorites_to_chkboxes(self, array):
         """Add items to the favorites list"""
         # Loop over each item in the array
-        for item in array:
-            # Create
-            chkBoxWidget = QCheckBox()
+        for dic in array:
             # Create horizontal layout for chkbox and remove button
+            item = dic['item']
+            checked = dic['checked']
             widget_layout = QHBoxLayout()
 
             # Create and add chkbox to layout
             checkbox = QCheckBox(item)
-            checkbox.setChecked(False)
+            checkbox.setChecked(checked)
             checkbox.setStyleSheet(self.widget_style)
             widget_layout.addWidget(checkbox)
 
             # Move the "Remove" button to the left
             widget_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
             # Create the "Remove" button with the 'remove.png' icon image
-            remove_button = self.CustomButtom()
-            remove_button.setFixedSize(15, 15)
-            remove_button.setStyleSheet(self.widget_style)
+            remove_button = CustomButton()
 
-            # Load the icon pixmap from the image file
-            pixmap = QPixmap("remove.png")
-
-            # Scale the pixmap to the desired size
-            icon_size = QSize(24, 24)
-            scaled_pixmap = pixmap.scaled(icon_size)
-
-            # Create the QIcon from the scaled pixmap
-            icon = QIcon(scaled_pixmap)
-            remove_button.setIcon(icon)
-
-            # Set X icon on button
-            remove_button.setIconSize(icon_size)
             # Use functools.partial to capture the value of 'item'
             print(item)
             remove_button.clicked.connect(
                 functools.partial(self.remove_favorite, item))
-
+            checkbox.clicked.connect(
+                lambda state, item_to_update=item: self.checkbox_state_changed_handler(state, item_to_update))
             widget_layout.addWidget(remove_button)
             self.checkbox_layout.addLayout(widget_layout)
-    # Function to add checkboxes for each item in the favorites list
 
     def add_favorite_to_ckhboxes(self, data):
+        # Favorites: List of Dictonaries containtaining item: data, checked: True/False
         # Varifying the data is not already in the lust
-        if data not in self.favorites_array:
-
-            # Append text data to tracker array
-            self.favorites_array.append(data)
-
-            # For each item in the tracker array
-            for favorite in self.favorites_array:
-
+        if data not in [favorite['item'] for favorite in self.favorites]:
+            # Append Dictonary to the Favorites List
+            self.favorites.append({'item': data, 'checked': False})
+            # For each item in the tracker array: all the data sections from each dictonary
+            for item in [favorite['item'] for favorite in self.favorites]:
                 # Create horizontal layout for chkbox and remove button
                 widget_layout = QHBoxLayout()
 
                 # Create and add chkbox to layout
-                checkbox = QCheckBox(favorite)
+                checkbox = QCheckBox(item)
                 checkbox.setChecked(False)
                 checkbox.setStyleSheet(self.widget_style)
                 widget_layout.addWidget(checkbox)
@@ -277,28 +234,14 @@ class MyGUI(QMainWindow):
                 if not self.is_checkbox_in_layout(self.checkbox_layout, checkbox):
                     # If it isn't it can be added to the checkbox layout
                     # Create the "Remove" button with the 'remove.png' icon image
-                    remove_button = self.CustomButtom()
+                    remove_button = CustomButton()
                     remove_button.setFixedSize(15, 15)
-                    remove_button.setStyleSheet(self.widget_style)
 
-                    # Load the icon pixmap from the image file
-                    pixmap = QPixmap("remove.png")
-
-                    # Scale the pixmap to the desired size
-                    icon_size = QSize(24, 24)
-                    scaled_pixmap = pixmap.scaled(icon_size)
-
-                    # Create the QIcon from the scaled pixmap
-                    icon = QIcon(scaled_pixmap)
-                    remove_button.setIcon(icon)
-
-                    # Set X icon on button
-                    remove_button.setIconSize(icon_size)
                     # Use functools.partial to capture the value of 'item'
-                    print(favorite)
                     remove_button.clicked.connect(
                         functools.partial(self.remove_favorite, data))
-
+                    checkbox.clicked.connect(
+                        lambda state, item_to_update=data: self.checkbox_state_changed_handler(state, item_to_update))
                     widget_layout.addWidget(remove_button)
                     self.checkbox_layout.addLayout(widget_layout)
 
@@ -360,13 +303,5 @@ class MyGUI(QMainWindow):
 
         # Save favorites array when closing the program
     def closeEvent(self, event):
-        save_favorites_to_file(self.favorites_array)
+        save_favorites_to_file(self.favorites)
         super().closeEvent(event)
-
-
-# Main Function
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    window = MyGUI()
-    window.show()
-    sys.exit(app.exec_())
